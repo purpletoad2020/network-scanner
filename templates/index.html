@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Scanner &amp; Topology Mapper</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card: #16213e;
+            --text: #e0e0e0;
+            --accent: #0f3460;
+            --highlight: #e94560;
+            --success: #4ecdc4;
+            --warning: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; width: 100%; }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        header h1 { color: var(--highlight); font-size: 2rem; margin-bottom: 6px; }
+        header p  { opacity: 0.7; }
+
+        .panel {
+            background: var(--card);
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.35);
+        }
+        .panel h2 { margin-bottom: 16px; font-size: 1.2rem; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group.full { grid-column: 1 / -1; }
+        label { font-weight: 600; margin-bottom: 5px; font-size: .9rem; opacity: .85; }
+        select, input[type="text"] {
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--accent);
+            background: #0f1623;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color .2s;
+        }
+        select:focus, input:focus { border-color: var(--highlight); }
+
+        .btn-row { display: flex; gap: 12px; margin-top: 16px; }
+        button {
+            background: var(--highlight);
+            color: #fff;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: background .2s, transform .1s;
+        }
+        button:hover { background: #c0354a; }
+        button:active { transform: scale(.97); }
+        button:disabled { background: #555; cursor: not-allowed; }
+        button.secondary { background: var(--accent); }
+        button.secondary:hover { background: #1a4880; }
+
+        #status-panel { display: none; }
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #0f1623;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success), #2ecc71);
+            width: 0%;
+            transition: width .3s ease;
+        }
+
+        #results-panel { display: none; }
+        .stats-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .stat-badge {
+            background: var(--accent);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: .85rem;
+        }
+        .stat-badge.gw { background: var(--highlight); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .9rem;
+        }
+        th, td {
+            padding: 10px 8px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+        th { background: var(--accent); font-weight: 600; }
+        tr:hover { background: rgba(255,255,255,.03); }
+        .gw-tag {
+            display: inline-block;
+            background: var(--highlight);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: .75rem;
+            font-weight: 600;
+        }
+        .port-badge {
+            display: inline-block;
+            background: var(--success);
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: .75rem;
+            margin: 1px;
+        }
+
+        #map-container {
+            margin-top: 20px;
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #map-frame {
+            width: 100%;
+            height: 620px;
+            border: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin .7s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            opacity: .5;
+            font-size: .8rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <h1>🔍 Network Scanner &amp; Topology Mapper</h1>
+        <p>Select an interface, define a subnet, and visualise your network.</p>
+    </header>
+
+    <!-- ── Configuration ── -->
+    <div class="panel">
+        <h2>⚙️ Scan Configuration</h2>
+        <div class="form-grid">
+            <div class="form-group full">
+                <label for="iface-select">Network Interface</label>
+                <select id="iface-select"><option>Loading interfaces…</option></select>
+            </div>
+            <div class="form-group">
+                <label for="subnet-input">Subnet (CIDR)</label>
+                <input id="subnet-input" type="text" placeholder="e.g. 192.168.1.0/24">
+            </div>
+            <div class="form-group">
+                <label for="ports-input">Custom Ports <small>(comma-separated, optional)</small></label>
+                <input id="ports-input" type="text" placeholder="80,443,8080,8443">
+            </div>
+        </div>
+        <div class="btn-row">
+            <button id="scan-btn">🚀 Start Scan</button>
+            <button id="refresh-btn" class="secondary">🔄 Refresh Interfaces</button>
+        </div>
+    </div>
+
+    <!-- ── Status ── -->
+    <div id="status-panel" class="panel">
+        <div class="status-header">
+            <span id="status-msg"></span>
+        </div>
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    </div>
+
+    <!-- ── Results ── -->
+    <div id="results-panel" class="panel">
+        <h2>📊 Scan Results</h2>
+        <div class="stats-row">
+            <span class="stat-badge" id="stat-hosts">Hosts: 0</span>
+            <span class="stat-badge gw" id="stat-gw">Gateway: —</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>IP</th><th>Hostname</th><th>MAC</th><th>Type</th>
+                        <th>Vendor</th><th>Open Ports</th><th>Role</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body"></tbody>
+            </table>
+        </div>
+
+        <h2 style="margin-top:24px;">🗺️ Topology Map</h2>
+        <div id="map-container">
+            <iframe id="map-frame" src=""></iframe>
+        </div>
+    </div>
+
+    <div class="footer">Network Scanner — AgnesCode</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ifaceSelect = $('iface-select');
+const subnetInput = $('subnet-input');
+const portsInput  = $('ports-input');
+const scanBtn     = $('scan-btn');
+const refreshBtn  = $('refresh-btn');
+const statusPanel = $('status-panel');
+const statusMsg   = $('status-msg');
+const progressFill= $('progress-fill');
+const resultsPanel= $('results-panel');
+const resultsBody = $('results-body');
+const mapFrame    = $('map-frame');
+const statHosts   = $('stat-hosts');
+const statGw      = $('stat-gw');
+
+let pollTimer = null;
+
+// ── Load interfaces ──
+async function loadInterfaces() {
+    ifaceSelect.innerHTML = '<option>Loading…</option>';
+    try {
+        const r = await fetch('/api/interfaces');
+        const d = await r.json();
+        ifaceSelect.innerHTML = '';
+        if (d.status === 'ok' && d.interfaces.length) {
+            d.interfaces.forEach((iface, i) => {
+                const opt = document.createElement('option');
+                opt.value = iface.name;
+                opt.textContent = `${iface.name}  —  ${iface.ip}/${iface.prefixlen}`;
+                opt.dataset.subnet = iface.network;
+                ifaceSelect.appendChild(opt);
+                if (i === 0) subnetInput.value = iface.network;
+            });
+        } else {
+            ifaceSelect.innerHTML = '<option>No interfaces found</option>';
+        }
+    } catch (e) {
+        ifaceSelect.innerHTML = '<option>Error loading interfaces</option>';
+    }
+}
+
+ifaceSelect.addEventListener('change', () => {
+    const opt = ifaceSelect.options[ifaceSelect.selectedIndex];
+    if (opt && opt.dataset.subnet) subnetInput.value = opt.dataset.subnet;
+});
+
+refreshBtn.addEventListener('click', loadInterfaces);
+
+// ── Start scan ──
+scanBtn.addEventListener('click', async () => {
+    const iface = ifaceSelect.value;
+    const subnet = subnetInput.value.trim();
+    const ports = portsInput.value.trim();
+
+    if (!iface || !subnet) {
+        alert('Please select an interface and enter a subnet.');
+        return;
+    }
+
+    // Reset UI
+    scanBtn.disabled = true;
+    scanBtn.innerHTML = '<span class="spinner"></span>Scanning…';
+    statusPanel.style.display = 'block';
+    resultsPanel.style.display = 'none';
+    progressFill.style.width = '0%';
+    statusMsg.textContent = 'Initialising scan…';
+
+    try {
+        const r = await fetch('/api/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ interface: iface, subnet, ports })
+        });
+        const d = await r.json();
+        if (d.status === 'ok') pollStatus(d.job_id);
+        else throw new Error(d.message || 'Failed to start scan');
+    } catch (e) {
+        statusMsg.textContent = `❌ ${e.message}`;
+        resetButton();
+    }
+});
+
+function pollStatus(jobId) {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+        try {
+            const r = await fetch(`/api/scan/${jobId}`);
+            const d = await r.json();
+            statusMsg.textContent = d.message;
+            progressFill.style.width = `${d.progress}%`;
+
+            if (d.status === 'completed') {
+                clearInterval(pollTimer);
+                resetButton();
+                showResults(d);
+            } else if (d.status === 'failed') {
+                clearInterval(pollTimer);
+                resetButton();
+                statusMsg.textContent = `❌ ${d.message}`;
+            }
+        } catch (e) {
+            console.error('Poll error:', e);
+        }
+    }, 800);
+}
+
+function resetButton() {
+    scanBtn.disabled = false;
+    scanBtn.textContent = '🚀 Start Scan';
+}
+
+function showResults(d) {
+    resultsPanel.style.display = 'block';
+    resultsBody.innerHTML = '';
+    statHosts.textContent = `Hosts: ${d.total_hosts || 0}`;
+    statGw.textContent = `Gateway: ${d.gateway || '—'}`;
+
+    if (d.result && d.result.length) {
+        d.result.forEach(h => {
+            const portsHtml = h.ports === 'none'
+                ? '<span style="opacity:.4">—</span>'
+                : h.ports.split(', ').map(p => `<span class="port-badge">${p}</span>`).join(' ');
+
+            resultsBody.innerHTML += `
+                <tr>
+                    <td><code>${h.ip}</code></td>
+                    <td>${h.hostname}</td>
+                    <td><code>${h.mac}</code></td>
+                    <td>${h.type}</td>
+                    <td>${h.vendor}</td>
+                    <td>${portsHtml}</td>
+                    <td>${h.gateway ? '<span class="gw-tag">Gateway</span>' : 'Host'}</td>
+                </tr>`;
+        });
+        mapFrame.src = `/map/${d.job_id}`;
+    } else {
+        resultsBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;">No hosts with meaningful responses found.</td></tr>';
+        mapFrame.src = '';
+    }
+}
+
+// ── Init ──
+loadInterfaces();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# ── Network Scanner — Docker Compose ──
+# Start:   docker compose up -d
+# Stop:    docker compose down
+# Logs:    docker compose logs -f
+
+version: "3.9"
+
+services:
+  scanner:
+    build: .
+    container_name: network-scanner
+    ports:
+      - "5000:5000"
+    # Required for raw sockets (ARP / ICMP) with scapy
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    # Use host network mode for accurate interface detection
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
