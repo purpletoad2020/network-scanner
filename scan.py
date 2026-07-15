@@ -570,22 +570,23 @@ def infer_device_type(open_ports: dict[int, str],
 
 
 def node_icon(device_type: str) -> str:
-    """Return a vis.js-compatible shape / icon hint."""
-    mapping = {
-        "Router / Gateway": "diamond",
-        "Server": "database",
-        "Virtual Machine": "hexagon",
-        "Mobile Device": "triangle",
-        "Single-Board Computer": "star",
-        "NAS / Storage": "box",
-        "Printer": "square",
-        "IoT Device": "dot",
-        "Domain Controller": "cylinder",
-        "Database Server": "database",
-        "Web Server": "box",
-        "Remote Desktop Server": "box",
+    """Return an emoji icon for the device type."""
+    icons = {
+        "Router / Gateway":     "\U0001f4e1",   # 📡
+        "Server":               "\U0001f5a5",   # 🖥
+        "Virtual Machine":      "\U0001f4bb",   # 💻
+        "Mobile Device":        "\U0001f4f1",   # 📱
+        "Single-Board Computer":"\U0001f353",   # 🍓
+        "NAS / Storage":        "\U0001f4be",   # 💾
+        "Printer":              "\U0001f5a8",   # 🖨
+        "IoT Device":           "\U0001f4df",   # 📟
+        "Domain Controller":    "\U0001f3db",   # 🏛
+        "Database Server":      "\U0001f5c4",   # 🗄
+        "Web Server":           "\U0001f310",   # 🌐
+        "Remote Desktop Server":"\U0001f5a7",   # 🖧
+        "Workstation / Client": "\U0001f4bb",   # 💻
     }
-    return mapping.get(device_type, "dot")
+    return icons.get(device_type, "\U0001f4bb")  # default 💻
 
 
 # ===================================================================
@@ -658,27 +659,37 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
     # Add gateway node
     if gateway_ip:
         gw = next((h for h in hosts if h["ip"] == gateway_ip), None)
-        label = gw["hostname"] or gateway_ip if gw else gateway_ip
+        icon = node_icon("Router / Gateway")
+        hostname = gw["hostname"] or "" if gw else ""
+        mac = gw["mac"] if gw else "Unknown"
+        label = f"{icon} {hostname or gateway_ip}\n{gateway_ip}\n{mac}"
         c = COLOURS.get("Router / Gateway", COLOURS["Server"])
         title_parts = [
             f"<b>Gateway</b>",
             f"IP: {gateway_ip}",
+            f"MAC: {mac}",
             f"Type: Router / Gateway",
         ]
+        if gw and gw["hostname"]:
+            title_parts.insert(1, f"Hostname: {gw['hostname']}")
         net.add_node(
             gateway_ip,
             label=label,
             color={"background": c["bg"], "border": c["border"]},
             size=30,
-            shape=node_icon("Router / Gateway"),
+            shape="dot",
+            font={"size": 12, "face": "Segoe UI, Arial", "color": "#e0e0e0", "multi": True},
             title="<br>".join(title_parts),
         )
 
     # Add host nodes
     for h in hosts:
         ip = h["ip"]
-        label = h["hostname"] or ip
+        hostname = h["hostname"] or ip
+        mac = h["mac"]
         dtype = h["device_type"]
+        icon = node_icon(dtype)
+        label = f"{icon} {hostname}\n{ip}\n{mac}"
         c = COLOURS.get(dtype, {"bg": "#6366f1", "border": "#ffffff"})
 
         ports_str = ", ".join(
@@ -700,7 +711,8 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
             label=label,
             color={"background": c["bg"], "border": c["border"]},
             size=20,
-            shape=node_icon(dtype),
+            shape="dot",
+            font={"size": 11, "face": "Segoe UI, Arial", "color": "#e0e0e0", "multi": True},
             title="<br>".join(title_lines),
         )
 
