@@ -121,6 +121,7 @@ def api_scan():
             "message": "Initialising scan...",
             "result": None,
             "map_file": None,
+            "job_id": job_id,
             "total_hosts": 0,
         }
 
@@ -163,6 +164,7 @@ def _run_scan(job_id: str, interface_name: str,
                 "status": status,
                 "progress": progress,
                 "message": message,
+                "job_id": job_id,
                 **kwargs,
             })
 
