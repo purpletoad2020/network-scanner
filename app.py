@@ -222,18 +222,19 @@ def _run_scan(job_id: str, interface_name: str,
             is_gw = (ip == gateway_ip)
             device_type = infer_device_type(open_ports, vendor, dev_hint, is_gw)
 
-            has_meaningful_response = True  # Always include ARP-discovered hosts
+            has_meaningful_response = bool(hostname or open_ports or mac != "Unknown")
 
-            hosts_data.append({
-                "ip": ip,
-                "mac": mac,
-                "hostname": hostname if hostname else "",
-                "open_ports": open_ports,
-                "vendor": vendor,
-                "device_type": device_type,
-                "is_gateway": is_gw,
-                "discovered_via": via,
-            })
+            if has_meaningful_response:
+                hosts_data.append({
+                    "ip": ip,
+                    "mac": mac,
+                    "hostname": hostname,
+                    "open_ports": open_ports,
+                    "vendor": vendor,
+                    "device_type": device_type,
+                    "is_gateway": is_gw,
+                    "discovered_via": via,
+                })
 
             processed += 1
 

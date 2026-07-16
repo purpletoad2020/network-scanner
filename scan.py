@@ -662,7 +662,7 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
         icon = node_icon("Router / Gateway")
         gw_hostname = gw["hostname"] if gw and gw["hostname"] else ""
         gw_mac = gw["mac"] if gw else "Unknown"
-        label = f"{icon}\n{gateway_ip}"
+        label = icon
         c = COLOURS.get("Router / Gateway", COLOURS["Server"])
         title_parts = [
             f"<b>Gateway</b>",
@@ -680,7 +680,7 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
             color={"background": c["bg"], "border": c["border"]},
             size=30,
             shape="dot",
-            font={"size": 12, "face": "Segoe UI, Arial", "color": "#e0e0e0"},
+            font={"size": 28, "face": "Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, Arial", "color": "#e0e0e0"},
             title="<br>".join(title_parts),
         )
 
@@ -691,7 +691,7 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
         mac = h["mac"]
         dtype = h["device_type"]
         icon = node_icon(dtype)
-        label = f"{icon}\n{ip}"
+        label = icon
         c = COLOURS.get(dtype, {"bg": "#6366f1", "border": "#ffffff"})
 
         ports_str = ", ".join(
@@ -717,7 +717,7 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
             color={"background": c["bg"], "border": c["border"]},
             size=20,
             shape="dot",
-            font={"size": 12, "face": "Segoe UI, Arial", "color": "#e0e0e0"},
+            font={"size": 24, "face": "Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, Arial", "color": "#e0e0e0"},
             title="<br>".join(title_lines),
         )
 
