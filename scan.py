@@ -305,7 +305,7 @@ def arp_scan(network: ipaddress.IPv4Network, interface_name: str = None) -> list
     """
     Layer-2 ARP sweep.  Returns [{ip, mac}] for every alive host.
     Requires root / admin on most platforms.
-    Falls back to socket-based scanning if scapy fails.
+    Tries scapy first, falls back to socket-based scanning if scapy fails.
     """
     if not SCAPY_AVAILABLE:
         return socket_arp_scan(network)
@@ -318,7 +318,7 @@ def arp_scan(network: ipaddress.IPv4Network, interface_name: str = None) -> list
         
         # Broadcast ARP request to entire /24
         pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=str(network))
-        ans, _ = srp(pkt, timeout=3, verbose=False)
+        ans, _ = srp(pkt, timeout=3, verbose=False, iface=conf.iface)
         for _, rcv in ans:
             discovered.append({
                 "ip": rcv[ARP].psrc,
@@ -326,13 +326,53 @@ def arp_scan(network: ipaddress.IPv4Network, interface_name: str = None) -> list
             })
     except PermissionError:
         print("[!] ARP scan requires root/admin privileges.")
-    except OSError as exc:
-        print(f"[!] ARP scan failed (network unreachable): {exc}")
+    except Exception as exc:
+        print(f"[!] Scapy ARP scan failed: {exc}")
         print("    Falling back to socket-based scanning...")
         return socket_arp_scan(network)
+    
+    return discovered
+
+
+def nmap_arp_scan(network: ipaddress.IPv4Network, interface_name: str = None) -> list[dict]:
+    """
+    Use nmap for fast, reliable host discovery via ARP/ICMP.
+    Falls back to socket_arp_scan if nmap is not available.
+    """
+    discovered: list[dict] = []
+    try:
+        import subprocess
+        cmd = [
+            "nmap", "-sn", "-n", "--send-ip",
+            "-oG", "-",  # greppable output to stdout
+            str(network)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            print(f"    nmap scan failed: {result.stderr.strip()}")
+            return socket_arp_scan(network)
+        
+        for line in result.stdout.splitlines():
+            if line.startswith("#") and "Host:" in line:
+                parts = line.split()
+                # Format: #Host: 192.168.1.1 () Status: Up
+                try:
+                    ip_idx = parts.index("#Host:") + 1
+                    ip = parts[ip_idx]
+                    status_idx = parts.index("Status:") + 1
+                    status = parts[status_idx]
+                    if status == "Up":
+                        discovered.append({"ip": ip, "mac": "Unknown", "via": "Nmap"})
+                except (ValueError, IndexError):
+                    pass
+    except FileNotFoundError:
+        print("    nmap not found, falling back to socket-based scanning...")
+        return socket_arp_scan(network)
+    except subprocess.TimeoutExpired:
+        print("    nmap scan timed out, falling back to socket-based scanning...")
+        return socket_arp_scan(network)
     except Exception as exc:
-        print(f"[!] ARP scan failed: {exc}")
-        print("    Falling back to socket-based scanning...")
+        print(f"    nmap scan error: {exc}, falling back to socket-based scanning...")
         return socket_arp_scan(network)
     
     return discovered

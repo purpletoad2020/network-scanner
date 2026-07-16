@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
     net-tools \
     tcpdump \
+    nmap \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python dependencies ──

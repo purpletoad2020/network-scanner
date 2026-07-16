@@ -179,19 +179,39 @@ def _run_scan(job_id: str, interface_name: str,
         # Step 2: Host discovery
         _update("running", 15, f"Scanning {subnet} for live hosts...")
 
-        # ARP scan
-        arp_results = arp_scan(subnet, interface_name)
-        found_ips = {r["ip"] for r in arp_results}
-
+        # ARP scan — try nmap first, then scapy, then socket
+        arp_results = []
+        via_method = None
+        
+        # Try nmap
+        try:
+            from scan import nmap_arp_scan
+            arp_results = nmap_arp_scan(subnet, interface_name)
+            if arp_results:
+                via_method = "Nmap"
+        except Exception:
+            pass
+        
+        # Fallback to scapy
         if not arp_results:
-            _update("running", 25, "ARP found nothing. Falling back to socket scan...")
+            try:
+                from scan import arp_scan as scapy_arp_scan
+                arp_results = scapy_arp_scan(subnet, interface_name)
+                if arp_results:
+                    via_method = "ARP"
+            except Exception:
+                pass
+        
+        # Final fallback to socket
+        if not arp_results:
+            _update("running", 25, "All scan methods returned nothing. Trying socket-based scan...")
             arp_results = socket_arp_scan(subnet)
-            for r in arp_results:
-                r.setdefault("via", "TCP-Socket")
-            found_ips = {r["ip"] for r in arp_results}
-        else:
-            for r in arp_results:
-                r.setdefault("via", "ARP")
+            via_method = "TCP-Socket"
+        
+        for r in arp_results:
+            r.setdefault("via", via_method or "Unknown")
+        
+        found_ips = {r["ip"] for r in arp_results}
 
         total_discovered = len(arp_results)
         _update("running", 30, f"Discovered {total_discovered} hosts. Collecting details...")
