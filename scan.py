@@ -660,36 +660,38 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
     if gateway_ip:
         gw = next((h for h in hosts if h["ip"] == gateway_ip), None)
         icon = node_icon("Router / Gateway")
-        hostname = gw["hostname"] or "" if gw else ""
-        mac = gw["mac"] if gw else "Unknown"
-        label = f"{icon} {hostname or gateway_ip}\n{gateway_ip}\n{mac}"
+        gw_hostname = gw["hostname"] if gw and gw["hostname"] else ""
+        gw_mac = gw["mac"] if gw else "Unknown"
+        label = f"{icon}\n{gateway_ip}"
         c = COLOURS.get("Router / Gateway", COLOURS["Server"])
         title_parts = [
             f"<b>Gateway</b>",
-            f"IP: {gateway_ip}",
-            f"MAC: {mac}",
-            f"Type: Router / Gateway",
         ]
-        if gw and gw["hostname"]:
-            title_parts.insert(1, f"Hostname: {gw['hostname']}")
+        if gw_hostname:
+            title_parts.append(f"Hostname: {gw_hostname}")
+        title_parts.extend([
+            f"IP: {gateway_ip}",
+            f"MAC: {gw_mac}",
+            f"Type: Router / Gateway",
+        ])
         net.add_node(
             gateway_ip,
             label=label,
             color={"background": c["bg"], "border": c["border"]},
             size=30,
             shape="dot",
-            font={"size": 12, "face": "Segoe UI, Arial", "color": "#e0e0e0", "multi": True},
+            font={"size": 12, "face": "Segoe UI, Arial", "color": "#e0e0e0"},
             title="<br>".join(title_parts),
         )
 
     # Add host nodes
     for h in hosts:
         ip = h["ip"]
-        hostname = h["hostname"] or ip
+        hostname = h["hostname"] or ""
         mac = h["mac"]
         dtype = h["device_type"]
         icon = node_icon(dtype)
-        label = f"{icon} {hostname}\n{ip}\n{mac}"
+        label = f"{icon}\n{ip}"
         c = COLOURS.get(dtype, {"bg": "#6366f1", "border": "#ffffff"})
 
         ports_str = ", ".join(
@@ -697,14 +699,17 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
         ) or "No open ports"
 
         title_lines = [
-            f"<b>{label}</b>",
-            f"IP: {ip}",
-            f"MAC: {h['mac']}",
+            f"<b>{ip}</b>",
+        ]
+        if hostname:
+            title_lines.append(f"Hostname: {hostname}")
+        title_lines.extend([
+            f"MAC: {mac}",
             f"Type: {dtype}",
             f"Vendor: {h['vendor']}",
             f"Ports: {ports_str}",
             f"Discovered: {h['discovered_via']}",
-        ]
+        ])
 
         net.add_node(
             ip,
@@ -712,7 +717,7 @@ def build_topology(hosts: list[dict], gateway_ip: str | None,
             color={"background": c["bg"], "border": c["border"]},
             size=20,
             shape="dot",
-            font={"size": 11, "face": "Segoe UI, Arial", "color": "#e0e0e0", "multi": True},
+            font={"size": 12, "face": "Segoe UI, Arial", "color": "#e0e0e0"},
             title="<br>".join(title_lines),
         )
 
