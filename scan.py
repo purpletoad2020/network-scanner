@@ -420,31 +420,41 @@ def socket_arp_scan(network: ipaddress.IPv4Network) -> list[dict]:
     except Exception:
         pass
     
-    # Strategy 2: Ping sweep using system ping
+    # Strategy 2: Ping sweep using system ping (skip if ping not available)
     target_ips = [str(h) for h in network.hosts()]
     pings = []
-    if sys.platform == "win32":
-        for ip in target_ips:
-            pings.append(subprocess.Popen(
-                ["ping", "-n", "1", "-w", "500", ip],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            ))
-    else:
-        for ip in target_ips:
-            pings.append(subprocess.Popen(
-                ["ping", "-c", "1", "-W", "1", ip],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            ))
+    ping_available = False
+    try:
+        subprocess.run(["ping", "--version"], capture_output=True, timeout=3)
+        ping_available = True
+    except Exception:
+        pass
     
-    for proc, ip in zip(pings, target_ips):
-        try:
-            proc.wait(timeout=2)
-            if proc.returncode == 0:
-                # Check if already in discovered list
-                if not any(d["ip"] == ip for d in discovered):
-                    discovered.append({"ip": ip, "mac": "Unknown", "via": "Ping"})
-        except Exception:
-            pass
+    if ping_available:
+        if sys.platform == "win32":
+            for ip in target_ips:
+                pings.append(subprocess.Popen(
+                    ["ping", "-n", "1", "-w", "500", ip],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                ))
+        else:
+            for ip in target_ips:
+                pings.append(subprocess.Popen(
+                    ["ping", "-c", "1", "-W", "1", ip],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                ))
+        
+        for proc, ip in zip(pings, target_ips):
+            try:
+                proc.wait(timeout=2)
+                if proc.returncode == 0:
+                    # Check if already in discovered list
+                    if not any(d["ip"] == ip for d in discovered):
+                        discovered.append({"ip": ip, "mac": "Unknown", "via": "Ping"})
+            except Exception:
+                pass
+    else:
+        print("    [!] ping command not available, skipping ICMP sweep")
     
     # Strategy 3: TCP connect to common ports for remaining IPs
     remaining = [ip for ip in target_ips if not any(d["ip"] == ip for d in discovered)]
