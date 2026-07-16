@@ -380,46 +380,90 @@ def nmap_arp_scan(network: ipaddress.IPv4Network, interface_name: str = None) ->
 
 def socket_arp_scan(network: ipaddress.IPv4Network) -> list[dict]:
     """
-    Socket-based ARP/ICMP scan as a fallback when scapy fails.
-    Uses TCP connect to common ports as a proxy for host discovery.
+    Host discovery fallback when scapy/nmap fail.
+    Uses multiple strategies:
+      1. Read existing ARP cache via `arp -a`
+      2. Ping sweep via subprocess (uses system ping)
+      3. TCP connect to common ports
     """
     discovered: list[dict] = []
     print(f"    Using socket-based scan on {network}...")
     
-    # Try TCP connect to common ports as host discovery
-    test_ports = [80, 443, 22, 53]
+    # Strategy 1: Parse existing ARP cache
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=10)
+            for line in result.stdout.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    try:
+                        ip = parts[0]
+                        if ipaddress.ip_address(ip) in network:
+                            mac = parts[1].replace("-", ":")
+                            if len(mac) == 17:
+                                discovered.append({"ip": ip, "mac": mac, "via": "ARP-Cache"})
+                    except ValueError:
+                        pass
+        else:
+            result = subprocess.run(["ip", "neigh", "show"], capture_output=True, text=True, timeout=10)
+            for line in result.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 5:
+                    try:
+                        ip = parts[0]
+                        if ipaddress.ip_address(ip) in network:
+                            mac = parts[4]
+                            if ":" in mac:
+                                discovered.append({"ip": ip, "mac": mac, "via": "ARP-Cache"})
+                    except ValueError:
+                        pass
+    except Exception:
+        pass
+    
+    # Strategy 2: Ping sweep using system ping
+    target_ips = [str(h) for h in network.hosts()]
+    pings = []
+    if sys.platform == "win32":
+        for ip in target_ips:
+            pings.append(subprocess.Popen(
+                ["ping", "-n", "1", "-w", "500", ip],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ))
+    else:
+        for ip in target_ips:
+            pings.append(subprocess.Popen(
+                ["ping", "-c", "1", "-W", "1", ip],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ))
+    
+    for proc, ip in zip(pings, target_ips):
+        try:
+            proc.wait(timeout=2)
+            if proc.returncode == 0:
+                # Check if already in discovered list
+                if not any(d["ip"] == ip for d in discovered):
+                    discovered.append({"ip": ip, "mac": "Unknown", "via": "Ping"})
+        except Exception:
+            pass
+    
+    # Strategy 3: TCP connect to common ports for remaining IPs
+    remaining = [ip for ip in target_ips if not any(d["ip"] == ip for d in discovered)]
     
     def _probe_host(ip: str) -> dict | None:
         try:
-            # Try connecting to common ports
-            for port in test_ports:
+            for port in [80, 443, 22, 53, 8080, 3389]:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(0.5)
                 result = s.connect_ex((ip, port))
                 s.close()
                 if result == 0:
                     return {"ip": ip, "mac": "Unknown", "via": "TCP-Socket"}
-            
-            # If no TCP connection succeeded, try ICMP ping
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-                s.settimeout(1)
-                ident = os.getpid() & 0xFFFF
-                pkt = _build_icmp(ident, 1)
-                s.sendto(pkt, (ip, 0))
-                _, _ = s.recvfrom(1024)
-                s.close()
-                return {"ip": ip, "mac": "Unknown", "via": "ICMP-Socket"}
-            except Exception:
-                pass
-                
-            return None
         except Exception:
-            return None
-
+            pass
+        return None
+    
     with ThreadPoolExecutor(max_workers=64) as pool:
-        target_ips = [str(h) for h in network.hosts()]
-        futures = {pool.submit(_probe_host, ip): ip for ip in target_ips}
+        futures = {pool.submit(_probe_host, ip): ip for ip in remaining}
         for fut in as_completed(futures):
             try:
                 r = fut.result()
